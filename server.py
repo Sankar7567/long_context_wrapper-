@@ -129,6 +129,12 @@ HTML_CONTENT = """
     </style>
     <!-- Use marked for minimal markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked-katex-extension/lib/index.umd.js"></script>
+    <script>
+        marked.use(markedKatex({throwOnError: false}));
+    </script>
 </head>
 <body>
 
@@ -212,8 +218,12 @@ HTML_CONTENT = """
 
                     document.getElementById('content-view').appendChild(activeSectionDom);
                     
-                    // Auto-scroll to bottom
-                    document.getElementById('main').scrollTo(0, document.getElementById('main').scrollHeight);
+                    // Only auto-scroll on new section if user is at the bottom
+                    const mainDiv = document.getElementById('main');
+                    const isAtBottom = mainDiv.scrollHeight - mainDiv.scrollTop - mainDiv.clientHeight < 150;
+                    if (isAtBottom) {
+                        mainDiv.scrollTo(0, mainDiv.scrollHeight);
+                    }
                 }
                 else if (msg.type === "token") {
                     activeSectionContent += msg.data;
