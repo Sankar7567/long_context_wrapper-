@@ -1,0 +1,28 @@
+# AI TUTORING & LONG-FORM ENGINE - AGENT CODING RULES
+
+## 1. Core Engineering Principles
+- SOLID & Clean Architecture: Maintain strict separation of concerns. The API layer (FastAPI), Execution Engine (Orchestrator), Data Access (Chroma/SQLite), and UI (React) must remain decoupled.
+- Fail-Fast & Type Safety: Use Pydantic v2 for all Python backend models and strict TypeScript interfaces for the frontend. Validate at system boundaries immediately.
+- Defensive Asynchrony: All I/O operations (Ollama HTTP calls, disk reads, vector queries, SSE streams) MUST be non-blocking (`async`/`await` in Python, async generators, `httpx`).
+- Memory Efficiency: Never hold massive multi-page documents in raw RAM strings. Process long-form output sequentially using chunked streaming and compressed state buffers.
+
+## 2. Environment & Model Constraints
+- OS Environment: Ubuntu Linux (POSIX path conventions using `pathlib.Path`).
+- Model Backend: Ollama local instance running at `http://localhost:11434` with model `qwen3:8b`.
+- LLM Call Strategy:
+  - For structural planning: Use `format="json"` with Pydantic validation.
+  - For content drafting: Stream via SSE using `qwen3:8b` context windows wisely.
+  - System Prompts: Keep prompts clear and deterministic. Instruct `qwen3:8b` explicitly to stick strictly to assigned sub-sections without repeating document-wide introductions or conclusions.
+
+## 3. UI/UX & Performance Principles
+- Minimalist GUI: Simple, uncluttered, distraction-free interface. Focus on readability (clean typography, subtle borders, high contrast).
+- Anti-DOM Overloading Strategy:
+  - NEVER re-parse or re-render a 30-page Markdown document from scratch on every incoming token chunk.
+  - Store completed sections as frozen, memoized static blocks (`React.memo`).
+  - Stream tokens ONLY into the active `CurrentSectionTile`.
+  - Batch/throttle streaming updates to React state using `requestAnimationFrame` or a 50ms buffer to maintain 60 FPS scrolling.
+
+## 4. Code Standards
+- Code Formatting: Modular single-responsibility files (max 200 lines per file where possible).
+- Error Handling: No bare `except:` clauses. Throw domain exceptions (`OllamaConnectionError`, `BlueprintValidationError`) and return structured error events down the SSE channel.
+- No Obsolete Code: Refactor cleanly—do not leave commented-out dead code or unused dependencies.
