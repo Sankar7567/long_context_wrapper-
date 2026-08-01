@@ -22,9 +22,9 @@ class RunningState(BaseModel):
 async def generate_outline(prompt: str) -> Outline:
     """Generates a structured outline for the given prompt."""
     system_prompt = (
-        "You are a master planner. Create an outline for the user's topic. "
-        "Return STRICTLY JSON matching this schema: "
-        "{'title': '...', 'sections': [{'id': 'sec1', 'title': '...', 'key_points': ['...']}]}"
+        'You are a master planner. Create an outline for the user\'s topic. '
+        'Return STRICTLY raw JSON matching this schema exactly (use double quotes):\n'
+        '{"title": "...", "sections": [{"id": "sec1", "title": "...", "key_points": ["..."]}]}'
     )
     
     payload = {
@@ -32,7 +32,7 @@ async def generate_outline(prompt: str) -> Outline:
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
-        "format": "json"
+        "options": {"temperature": 0.3}
     }
     
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -40,8 +40,16 @@ async def generate_outline(prompt: str) -> Outline:
         response.raise_for_status()
         data = response.json()
         
-        # Parse into Pydantic model
-        outline_dict = json.loads(data.get("response", "{}"))
+        # Robustly extract JSON block in case model added markdown wrappers
+        text = data.get("response", "")
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            text = text[start_idx:end_idx+1]
+        else:
+            text = "{}"
+            
+        outline_dict = json.loads(text)
         return Outline.model_validate(outline_dict)
 
 async def stream_section(outline: Outline, current_section: SubSection, running_state: RunningState) -> AsyncGenerator[str, None]:

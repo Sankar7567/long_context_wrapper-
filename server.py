@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
@@ -126,6 +126,35 @@ HTML_CONTENT = """
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 5px;
         }
+        @media print {
+            #sidebar, #prompt-input, #generate-btn, #export-btn {
+                display: none !important;
+            }
+            #main {
+                padding: 0 !important;
+                overflow: visible !important;
+            }
+            body {
+                background-color: white !important;
+                color: black !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+            #content-view {
+                padding-bottom: 0 !important;
+                margin-top: 0 !important;
+            }
+            .content-section h2 {
+                color: black !important;
+                break-before: page;
+                page-break-before: always;
+                border-bottom: 2px solid #ccc;
+            }
+            .content-section:first-of-type h2 {
+                break-before: auto;
+                page-break-before: auto;
+            }
+        }
     </style>
     <!-- Use marked for minimal markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -150,6 +179,7 @@ HTML_CONTENT = """
             <textarea id="prompt-input" placeholder="What do you want to write about? (e.g. A comprehensive guide on Quantum Computing)"></textarea>
             <br>
             <button id="generate-btn" onclick="startGeneration()">Generate</button>
+            <button id="export-btn" onclick="window.print()" disabled style="background-color: #10b981; margin-left: 10px;">Export PDF</button>
         </div>
         
         <div id="content-view"></div>
@@ -171,6 +201,7 @@ HTML_CONTENT = """
 
             // Reset UI
             document.getElementById('generate-btn').disabled = true;
+            document.getElementById('export-btn').disabled = true;
             document.getElementById('blueprint-container').innerHTML = 'Generating blueprint...';
             document.getElementById('content-view').innerHTML = '';
 
@@ -247,6 +278,7 @@ HTML_CONTENT = """
                 }
                 else if (msg.type === "complete") {
                     document.getElementById('generate-btn').disabled = false;
+                    document.getElementById('export-btn').disabled = false;
                     eventSource.close();
                 }
                 else if (msg.type === "error") {
@@ -272,11 +304,16 @@ async def get_index():
     return HTMLResponse(HTML_CONTENT)
 
 @app.get("/api/stream")
-async def stream_content(prompt: str = Query(...)):
+async def stream_content(request: Request, prompt: str = Query(...)):
     async def event_generator():
         try:
+            if await request.is_disconnected():
+                return
+            
             # 1. Generate Outline
             outline = await generate_outline(prompt)
+            if await request.is_disconnected():
+                return
             yield f"data: {json.dumps({'type': 'blueprint', 'data': outline.model_dump()})}\n\n"
             
             # 2. Initialize State
@@ -284,10 +321,14 @@ async def stream_content(prompt: str = Query(...)):
             
             # 3. Stream Sections Sequentially
             for section in outline.sections:
+                if await request.is_disconnected():
+                    return
                 yield f"data: {json.dumps({'type': 'section_start', 'data': {'id': section.id, 'title': section.title}})}\n\n"
                 
                 section_text = ""
                 async for token in stream_section(outline, section, running_state):
+                    if await request.is_disconnected():
+                        return
                     section_text += token
                     yield f"data: {json.dumps({'type': 'token', 'data': token})}\n\n"
                 
